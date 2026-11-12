@@ -11,8 +11,27 @@ set -u
 TARBALL="${1:?usage: smoke-test.sh <tarball>}"
 
 echo "== Unpacking ${TARBALL} to /usr/local =="
+rm -rf /usr/local/bin/rssguard /usr/local/lib/librssguard.so /usr/local/share/rssguard
 tar -xzf "$TARBALL" -C /usr/local
 ldconfig
+
+# Layout assertion: the installed files must sit where the app expects them.
+LAYOUT_OK=true
+for INSTALLED_FILE in /usr/local/bin/rssguard /usr/local/lib/librssguard.so; do
+  if [ ! -e "$INSTALLED_FILE" ]; then
+    echo "FAIL: expected installed file missing: ${INSTALLED_FILE}"
+    LAYOUT_OK=false
+  fi
+done
+if [ ! -x /usr/local/bin/rssguard ]; then
+  echo "FAIL: /usr/local/bin/rssguard is not executable"
+  LAYOUT_OK=false
+fi
+if [ "$LAYOUT_OK" = false ]; then
+  echo "FAIL: install layout does not match what RSSGuard expects"
+  exit 1
+fi
+echo "✓ Layout check passed: binary and library in place under /usr/local"
 
 echo "== Launching RSSGuard under Xvfb on a clean system =="
 # The CI container runs as root; Chromium (inside Qt WebEngine) refuses the
