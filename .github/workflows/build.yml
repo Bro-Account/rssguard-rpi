@@ -109,7 +109,7 @@ jobs:
 
   smoke-test:
     name: Smoke test on clean Debian 13
-    needs: build
+    needs: [version, build]
     runs-on: ubuntu-24.04-arm
     container:
       image: debian:13
