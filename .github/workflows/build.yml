@@ -1,0 +1,88 @@
+name: Build RSSGuard (Debian 13, aarch64)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "RSSGuard version to build (e.g. 5.3.0)"
+        required: true
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    container:
+      image: debian:13
+
+    steps:
+      - name: Determine version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "Building RSSGuard version: ${VERSION}"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+
+      # Packages the RSSGuard build script does not install itself and which
+      # are missing from the bare debian:13 image.
+      - name: Install base packages
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            git ca-certificates python3 perl bzip2
+
+      - uses: actions/checkout@v4
+
+      - name: Restore build cache
+        uses: actions/cache@v4
+        with:
+          path: build-library
+          key: rssguard-build-${{ env.VERSION }}
+          restore-keys: rssguard-build-${{ env.VERSION }}
+
+      - name: Build RSSGuard ${{ env.VERSION }}
+        run: ./update-rssguard.sh "${VERSION}" --build-only
+
+      - name: Package build
+        run: |
+          CACHE_DIR="build-library/rssguard/${VERSION}-aarch64-debian-13"
+          if [ ! -x "${CACHE_DIR}/bin/rssguard" ]; then
+            echo "Expected cache directory not found: ${CACHE_DIR}" >&2
+            exit 1
+          fi
+          # Contents map directly onto /usr/local (bin/, lib/, share/, ...).
+          tar -czf "rssguard-${VERSION}-linux-aarch64.tar.gz" \
+            --exclude="./state" \
+            -C "$CACHE_DIR" .
+
+      - name: Attach to GitHub Release (tag builds)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: rssguard-${{ env.VERSION }}-linux-aarch64.tar.gz
+          body: |
+            Prebuilt [RSSGuard](https://github.com/martinrotter/rssguard) ${{ env.VERSION }}
+            for Raspberry Pi OS / Debian 13 (aarch64), built automatically from
+            upstream source in GitHub Actions.
+
+            RSSGuard is GPLv3 — source code:
+            https://github.com/martinrotter/rssguard/releases/tag/${{ env.VERSION }}
+
+            ### Install
+
+                sudo tar -xzf rssguard-${{ env.VERSION }}-linux-aarch64.tar.gz -C /usr/local
+                sudo ldconfig
+
+      - name: Upload as workflow artifact (manual runs)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rssguard-${{ env.VERSION }}-linux-aarch64
+          path: rssguard-${{ env.VERSION }}-linux-aarch64.tar.gz

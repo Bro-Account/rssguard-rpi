@@ -1,0 +1,6 @@
+# Build cache (sync it across devices if you like, but don't commit it)
+build-library/
+
+# Local backups / leftovers
+*.backup*
+__pycache__/
