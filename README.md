@@ -55,8 +55,10 @@ sudo ldconfig
 
 ## How CI builds work
 
-- Trigger: push a tag `v<version>` (e.g. `v5.3.0`) or run the workflow
-  manually from the *Actions* tab.
+- Trigger: push a tag `v<version>` (e.g. `v5.3.0`), run the workflow manually
+  from the *Actions* tab (leaving the version empty auto-detects the latest
+  upstream release), or wait for the **daily scheduled check**, which builds
+  and publishes every new upstream RSSGuard release automatically.
 - The workflow runs `./update-rssguard.sh <version> --build-only` inside a
   `debian:13` container, so binaries match Raspberry Pi OS Trixie.
 - Tag builds are attached to a GitHub Release; manual runs are available as
