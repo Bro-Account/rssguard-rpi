@@ -1,4 +1,4 @@
-name: Build RSSGuard (Debian 13, aarch64)
+name: Build, test & publish RSSGuard (Debian 13, aarch64)
 
 on:
   workflow_dispatch:
@@ -101,28 +101,99 @@ jobs:
             --exclude="./state" \
             -C "$CACHE_DIR" .
 
-      - name: Attach to GitHub Release (tag & automatic builds)
-        if: github.event_name == 'push' || github.event_name == 'schedule'
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: v${{ env.VERSION }}
-          files: rssguard-${{ env.VERSION }}-linux-aarch64.tar.gz
-          body: |
-            Prebuilt [RSSGuard](https://github.com/martinrotter/rssguard) ${{ env.VERSION }}
-            for Raspberry Pi OS / Debian 13 (aarch64), built automatically from
-            upstream source in GitHub Actions.
-
-            RSSGuard is GPLv3 — source code:
-            https://github.com/martinrotter/rssguard/releases/tag/${{ env.VERSION }}
-
-            ### Install
-
-                sudo tar -xzf rssguard-${{ env.VERSION }}-linux-aarch64.tar.gz -C /usr/local
-                sudo ldconfig
-
-      - name: Upload as workflow artifact (manual runs)
-        if: github.event_name == 'workflow_dispatch'
+      - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:
           name: rssguard-${{ env.VERSION }}-linux-aarch64
           path: rssguard-${{ env.VERSION }}-linux-aarch64.tar.gz
+
+  smoke-test:
+    name: Smoke test on clean Debian 13
+    needs: build
+    runs-on: ubuntu-24.04-arm
+    container:
+      image: debian:13
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+
+    steps:
+      # Deliberately ONLY runtime packages (no -dev packages, no build
+      # tools): this container models a stock Raspberry Pi OS system.
+      # The Qt6 module list mirrors the runtime libraries librssguard.so
+      # links against (Qt base, WebEngine, Multimedia, QML/Quick, mpv).
+      - name: Install runtime & test packages
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates xvfb imagemagick fonts-dejavu-core \
+            libqt6core6t64 libqt6widgets6 libqt6gui6 libqt6network6 \
+            libqt6sql6 libqt6xml6 libqt6concurrent6 libqt6printsupport6 \
+            libqt6opengl6 libqt6openglwidgets6 libqt6dbus6 \
+            libqt6webenginecore6 libqt6webenginewidgets6 \
+            libqt6multimedia6 libqt6qml6 libqt6quick6 libmpv2 \
+            libqt6sql6-sqlite \
+            qml6-module-qtqml-workerscript qml6-module-qtquick-controls \
+            qml6-module-qtquick-layouts qml6-module-qtquick-templates \
+            qml6-module-qtquick-window qml6-module-qtwebengine \
+            libgl1 libegl1
+
+      - uses: actions/checkout@v7
+
+      - name: Download built tarball
+        uses: actions/download-artifact@v8
+        with:
+          name: rssguard-${{ env.VERSION }}-linux-aarch64
+          path: dist
+          merge-multiple: true
+
+      - name: Smoke test (launch on clean system)
+        run: bash tests/smoke-test.sh "dist/rssguard-${VERSION}-linux-aarch64.tar.gz"
+
+      - name: Upload smoke-test evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: rssguard-smoke-${{ env.VERSION }}
+          path: |
+            /tmp/rssguard-smoke.png
+            /tmp/rssguard-stderr.log
+            /tmp/rssguard-stdout.log
+          if-no-files-found: ignore
+
+  publish:
+    name: Publish release
+    needs: [version, build, smoke-test]
+    if: github.event_name == 'push' || github.event_name == 'schedule'
+    runs-on: ubuntu-24.04-arm
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+
+    steps:
+      - name: Download built tarball
+        uses: actions/download-artifact@v8
+        with:
+          name: rssguard-${{ env.VERSION }}-linux-aarch64
+          path: dist
+          merge-multiple: true
+
+      - name: Attach to GitHub Release (tag & automatic builds)
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ env.VERSION }}
+          files: dist/rssguard-${{ env.VERSION }}-linux-aarch64.tar.gz
+          body: |
+            Prebuilt [RSSGuard](https://github.com/martinrotter/rssguard) ${{ env.VERSION }}
+            for Raspberry Pi OS / Debian 13 (aarch64), built and smoke-tested
+            automatically from upstream source in GitHub Actions.
+
+            RSSGuard is GPLv3 — source code:
+            https://github.com/martinrotter/rssguard/releases/tag/${{ env.VERSION }}
+
+            ### Install (recommended: let the script do it)
+
+                ./update-rssguard.sh ${{ env.VERSION }}
+
+            ### Manual install
+
+                sudo tar -xzf rssguard-${{ env.VERSION }}-linux-aarch64.tar.gz -C /usr/local
+                sudo ldconfig

@@ -80,6 +80,16 @@ step takes care of this automatically)
 - Tag builds are attached to a GitHub Release; manual runs are available as
   workflow artifacts.
 
+## Automated testing
+
+Every CI build is smoke-tested before publication: the freshly built tarball
+is unpacked into a **clean Debian 13 container that contains only runtime
+packages** (no build tools, no dev headers — the same situation as a stock
+Raspberry Pi OS), and the binary is launched under a virtual display (Xvfb).
+The test passes only if the app starts, stays alive, and reports no
+dynamic-loader errors; a screenshot is saved as a workflow artifact as
+visual proof. Releases are published only after this test passes.
+
 ## Notes
 
 - RSSGuard is GPLv3; these builds are compiled from unmodified upstream
