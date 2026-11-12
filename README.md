@@ -28,10 +28,19 @@ compile each version once.
 
 ## Usage
 
+On Raspberry Pi OS / Debian 13+ (aarch64) the script first checks whether an
+official prebuilt build of the requested version exists on this repository's
+[Releases](../../releases) page. If yes, it downloads and installs it in
+seconds — no compilation. If not (or on other systems/OS versions), it falls
+back to building from source. Either way the script handles stopping and
+restarting RSSGuard, installing to `/usr/local`, and updating the desktop,
+icon, and linker caches.
+
 ```sh
-./update-rssguard.sh 5.3.0          # build & install a released version
-./update-rssguard.sh 5.0.0 --build-only   # build & cache, install later
-./update-rssguard.sh <URL-to-source-zip>  # build from a direct download link
+./update-rssguard.sh 5.3.0                  # install prebuilt (or build from source)
+./update-rssguard.sh 5.3.0 --no-prebuilt    # force a local source build
+./update-rssguard.sh 5.3.0 --build-only     # fetch/build into the cache only, install later
+./update-rssguard.sh <URL-to-source-zip>    # build from a direct download link
 ```
 
 The script installs itself everything it needs (Qt6, cmake, libmpv, etc. via
@@ -44,14 +53,21 @@ Subsequent installs of the same version are instant.
 ## Prebuilt binaries
 
 This repository builds RSSGuard automatically for **Raspberry Pi OS / Debian
-13 (aarch64)** via GitHub Actions (Debian 13 container on an ARM64 runner).
-Finished builds are attached to the matching
-[Releases](../../releases) page:
+13 (aarch64)** via GitHub Actions (Debian 13 container on an ARM64 runner),
+and the script consumes these builds directly: `./update-rssguard.sh <version>`
+downloads the matching release, seeds the local cache, and installs it with
+full run-state handling.
+
+The tarballs can also be installed by hand:
 
 ```sh
 sudo tar -xzf rssguard-<version>-linux-aarch64.tar.gz -C /usr/local
 sudo ldconfig
 ```
+
+(note that Qt6 runtime libraries such as `libqt6core6t64`, `libqt6gui6` and
+`libqt6widgets6` must be installed in that case — the script's dependency
+step takes care of this automatically)
 
 ## How CI builds work
 

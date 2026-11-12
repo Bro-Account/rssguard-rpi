@@ -87,7 +87,7 @@ jobs:
           restore-keys: rssguard-build-${{ env.VERSION }}
 
       - name: Build RSSGuard ${{ env.VERSION }}
-        run: ./update-rssguard.sh "${VERSION}" --build-only
+        run: ./update-rssguard.sh "${VERSION}" --build-only --no-prebuilt
 
       - name: Package build
         run: |

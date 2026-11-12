@@ -40,11 +40,13 @@ if [ -z "${1:-}" ]; then
   echo ""
   echo "Options:"
   echo "  --build-only    Build and cache without installing (run without flag to install later)"
+  echo "  --no-prebuilt   Ignore prebuilt GitHub releases, always compile"
   exit 1
 fi
 
 INPUT="$1"
 BUILD_ONLY=false
+PREBUILT_ENABLED=true # Default: use prebuilt GitHub release when available
 
 # Parse options (remaining arguments after version/URL)
 shift
@@ -52,6 +54,10 @@ while [[ $# -gt 0 ]]; do
   case $1 in
     --build-only)
       BUILD_ONLY=true
+      shift
+      ;;
+    --no-prebuilt)
+      PREBUILT_ENABLED=false
       shift
       ;;
     *)
@@ -177,6 +183,51 @@ sudo apt-get install -y $DEPS
 
 echo "✓ Dependencies installed"
 echo ""
+
+## Optional fast path: official prebuilt build from GitHub Releases.
+# Supported only on aarch64 with Debian 13 or newer (the release binaries are
+# built in a debian:13 container). Anything else, or a version without a
+# published release, falls back to compiling from source.
+if [ "$PREBUILT_ENABLED" = true ] && [ "$CACHE_COMPLETE" = false ]; then
+  PREBUILT_COMPATIBLE="$(
+    . /etc/os-release
+    if [ "$ARCH_SUFFIX" = "aarch64" ] && [ "${ID:-}" = "debian" ] && [ "${VERSION_ID:-0}" -ge 13 ] 2>/dev/null; then
+      echo yes
+    else
+      echo no
+    fi
+  )"
+
+  if [ "$PREBUILT_COMPATIBLE" = yes ]; then
+    PREBUILT_URL="https://github.com/Bro-Account/rssguard-rpi/releases/download/v${VERSION}/rssguard-${VERSION}-linux-aarch64.tar.gz"
+    PREBUILT_TARBALL="${CACHE_DIR}.prebuilt.tar.gz"
+
+    echo "Checking for prebuilt RSSGuard ${VERSION} on GitHub Releases..."
+    if wget --spider -q "$PREBUILT_URL"; then
+      echo "  Found: downloading prebuilt build (no compilation needed)..."
+      if wget --timeout=30 --tries=3 \
+         --output-document="$PREBUILT_TARBALL" "$PREBUILT_URL" \
+         && tar tzf "$PREBUILT_TARBALL" >/dev/null 2>&1; then
+
+        # Store it in the same layout a fresh build would have produced,
+        # so the rest of the script (cache check, installation) just works.
+        mkdir -p "$CACHE_DIR"
+        tar xzf "$PREBUILT_TARBALL" -C "$CACHE_DIR"
+        rm -f "$PREBUILT_TARBALL"
+
+        CACHE_COMPLETE=true
+        mark_task_done "cached"
+
+        echo "  ✓ Prebuilt build stored in ${CACHE_DIR}"
+      else
+        echo "  ⚠ Download failed - falling back to building from source"
+      fi
+    else
+      echo "  No prebuilt release for ${VERSION} - will build from source"
+    fi
+    echo ""
+  fi
+fi
 
 ## Early exit if binary and resources are cached
 if [ "$CACHE_COMPLETE" = true ]; then
